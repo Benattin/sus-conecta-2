@@ -34,7 +34,12 @@ const STATE_NAMES = { "sao paulo": "SP", "rio de janeiro": "RJ", "minas gerais":
   "parana": "PR", "rio grande do sul": "RS", "bahia": "BA", "pernambuco": "PE" };
 
 const SERVICES = [
-  { key: "UBS", terms: ["ubs", "unidade basica de saude", "unidade basica", "posto de saude", "postinho", "posto"] },
+  { key: "UBS", terms: ["ubs", "unidade basica de saude", "unidade basica", "posto de saude", "postinho"] },
+  // "posto" sozinho e ambiguo; os termos mais longos (posto de saude/gasolina) vencem na sobreposicao.
+  { key: "POSTO_AMBIGUO", terms: ["posto"] },
+  { key: "FORA_SAUDE", terms: ["posto de gasolina", "posto de combustivel", "gasolina", "combustivel", "etanol"] },
+  // Atributos de preferencia sem dado na base: nao bloqueiam a busca, geram nota.
+  { key: "ATRIBUTO", terms: ["fila", "filas", "tempo de espera", "espera", "lotada", "lotado", "vazia", "vazio", "rapido", "rapida"] },
   { key: "VACINA", terms: ["vacina", "vacinas", "vacinacao", "vacinar", "imunizacao"] },
   { key: "UPA", terms: ["upa", "upas", "pronto socorro", "pronto-socorro", "pronto atendimento"] },
   { key: "HOSPITAL", terms: ["hospital", "hospitais"] },
@@ -96,13 +101,19 @@ function negationCues(folded) {
     if (m[1] === "menos" && /(pelo|ao|a) $/.test(before)) continue;
     // "nao sei/encontro/consigo..." expressa dificuldade, nao exclusao do local.
     if (m[1] === "nao" && /^\s+(sei|encontro|acho|consigo|conheco|lembro|tenho certeza)/.test(after)) continue;
-    cues.push(m.index);
+    // "nao" nega o verbo e vale ate o fim da oracao; os demais so excluem o termo imediatamente seguinte
+    // ("sem fila na Bela Vista": "sem" atinge "fila", nao o distrito).
+    cues.push({ pos: m.index, end: m.index + m[0].length, scope: m[1] === "nao" ? "clause" : "adjacent" });
   }
   return cues;
 }
 
-function polarityAt(pos, clauses, cues) {
-  return cues.some((c) => c < pos && clauses[c] === clauses[pos]) ? "neg" : "pos";
+// Palavras que podem separar um marcador adjacente do termo excluido ("exceto a", "sem ser na", "nem na").
+const FILLER_RE = /^(?:\s+(?:a|o|as|os|um|uma|na|no|nas|nos|em|de|da|do|das|dos|pela|pelo|ser))*\s+$/;
+
+function polarityAt(pos, clauses, cues, folded) {
+  return cues.some((c) => c.pos < pos && clauses[c.pos] === clauses[pos] &&
+    (c.scope === "clause" || FILLER_RE.test(folded.slice(c.end, pos)))) ? "neg" : "pos";
 }
 
 function removeOverlaps(items) {
@@ -139,7 +150,7 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
   const folded = fold(original);
   const clauses = clauseIndex(folded);
   const cues = negationCues(folded);
-  const pol = (pos) => polarityAt(pos, clauses, cues);
+  const pol = (pos) => polarityAt(pos, clauses, cues, folded);
   const loc = [];
 
   // Estados por nome ("estado de Sao Paulo") e por sigla em maiusculas.
@@ -199,6 +210,12 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
   }
 
   const mentions = removeOverlaps(loc).map((x) => ({ ...x, polarity: pol(x.start) }));
+  // Exclusao se estende a itens coordenados: "exceto na Bela Vista e na Se" exclui os dois.
+  const COORD_RE = /^(?:\s+(?:e|nem|ou|a|o|na|no|da|do|em))*\s+$/;
+  for (let i = 1; i < mentions.length; i++) {
+    const prev = mentions[i - 1], cur = mentions[i];
+    if (prev.polarity === "neg" && cur.kind === prev.kind && cur.polarity === "pos" && COORD_RE.test(folded.slice(prev.end, cur.start))) cur.polarity = "neg";
+  }
   const services = [];
   const svc = [];
   for (const s of SERVICES) for (const t of s.terms) for (const r of findTerm(folded, t)) svc.push({ key: s.key, ...r });
@@ -295,8 +312,18 @@ export function decide({ text, intent, session: prev, now = Date.now(), options 
 
   const ubsPos = s.services.some((x) => x.key === "UBS" && x.polarity === "pos");
   const ubsNeg = !ubsPos && s.services.some((x) => x.key === "UBS" && x.polarity === "neg");
-  const othersPos = uniq(s.services.filter((x) => x.key !== "UBS" && x.polarity === "pos").map((x) => x.key));
+  const NON_SERVICE = ["UBS", "POSTO_AMBIGUO", "ATRIBUTO", "FORA_SAUDE"];
+  const othersPos = uniq(s.services.filter((x) => !NON_SERVICE.includes(x.key) && x.polarity === "pos").map((x) => x.key));
+  const has = (key) => s.services.some((x) => x.key === key && x.polarity === "pos");
   const hasLoc = s.mentions.length > 0 || Boolean(s.typo);
+
+  if (has("FORA_SAUDE") && !ubsPos) {
+    return out("LIMIT", "non_health_service", "Não tenho dados de postos de combustível nem de outros estabelecimentos fora da saúde. Eu só localizo endereços de UBS em " + coverageText() + ".", { ...session, service: null });
+  }
+  if (has("POSTO_AMBIGUO") && !ubsPos && !othersPos.length) {
+    return out("CLARIFY", "service_ambiguous", "Você procura um posto de saúde (UBS)? Se for isso, diga por exemplo: \"Procuro uma UBS na Bela Vista, São Paulo\". Não tenho dados de outros tipos de posto.", session);
+  }
+  const hasAttribute = s.services.some((x) => x.key === "ATRIBUTO");
 
   if (s.clinical && !ubsPos) {
     return out("LIMIT", "clinical", "Não faço diagnóstico, triagem nem indico medicamentos. Procure um profissional de saúde; em emergência, ligue 192 (SAMU). Se quiser, posso consultar o endereço de uma UBS no recorte: informe distrito e município.", session);
@@ -332,6 +359,7 @@ export function decide({ text, intent, session: prev, now = Date.now(), options 
   session.service = "UBS";
   if (othersPos.length) notes.push("combined_limit");
   if (s.clinical) notes.push("clinical_limit");
+  if (hasAttribute) notes.push("attribute_unavailable");
 
   // Municipio.
   const cityPos = uniq(s.mentions.filter((x) => x.kind === "city" && x.polarity === "pos").map((x) => x.value));
@@ -341,7 +369,8 @@ export function decide({ text, intent, session: prev, now = Date.now(), options 
   }
   const statePos = uniq(s.mentions.filter((x) => x.kind === "state" && x.polarity === "pos").map((x) => x.value));
   if (cityPos.length === 1) {
-    if (cityPos[0] !== session.city) session.district = null;
+    // So uma troca real de municipio descarta o distrito; completar um municipio ausente o preserva.
+    if (session.city && cityPos[0] !== session.city) session.district = null;
     session.city = cityPos[0];
     session.state = CITY_UF[cityPos[0]] || (statePos.length === 1 ? statePos[0] : null);
   } else if (cityNeg.length) {
@@ -467,7 +496,8 @@ export function searchUnits(data, q) {
 const NOTE_TEXT = {
   combined_limit: "Sobre vacinas, UPA, hospital, vagas ou estoque: a base não traz esses dados; confirme na unidade.",
   clinical_limit: "Não faço avaliação de sintomas; procure um profissional. Em emergência, ligue 192 (SAMU).",
-  injection_ignored: "Instruções para mudar regras ou a fonte foram ignoradas; a consulta usa sempre a base configurada.",
+  attribute_unavailable: "A base não informa fila, tempo de espera ou lotação; as UBS abaixo foram filtradas só por local.",
+  injection_ignored:"Instruções para mudar regras ou a fonte foram ignoradas; a consulta usa sempre a base configurada.",
 };
 
 // Executa um turno completo: classificacao (injetada), decisao, ferramenta e resposta.
@@ -491,7 +521,9 @@ export async function runTurn({ text, session, classify, fetchSource, now = Date
   const toolCalls = [];
   const notes = d.notes.map((n) => NOTE_TEXT[n]).filter(Boolean);
   if (d.action !== "SEARCH") {
-    return { session: d.session, response: { kind: d.action.toLowerCase(), code: d.code, text: d.text, units: [], notes }, trace, toolCalls, intent, decision: d };
+    // A nota de atributo fala de resultados; sem consulta ela nao se aplica.
+    const pre = d.notes.filter((n) => n !== "attribute_unavailable").map((n) => NOTE_TEXT[n]).filter(Boolean);
+    return { session: d.session, response: { kind: d.action.toLowerCase(), code: d.code, text: d.text, units: [], notes: pre }, trace, toolCalls, intent, decision: d };
   }
   const call = { tool: "consultar_base_ubs", query: d.query, startedAt: now };
   toolCalls.push(call);
