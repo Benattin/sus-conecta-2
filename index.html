@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data:; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>SUS Conecta 2.0 — agente CitizenTech</title>
+  <meta name="description" content="Protótipo acadêmico que localiza endereços de UBS em cinco distritos centrais de São Paulo e mostra a origem de cada dado.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f5c4f'/%3E%3Cpath d='M13 7h6v6h6v6h-6v6h-6v-6H7v-6h6z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body data-state="initial">
+  <a class="skip" href="#msg">Ir para o campo de mensagem</a>
+  <header class="top">
+    <div class="wrap top-inner">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">+</span>
+        <div>
+          <h1>SUS Conecta 2.0</h1>
+          <p class="tagline">Encontre uma UBS e saiba de onde vem a informação.</p>
+        </div>
+      </div>
+      <p class="badge">Protótipo acadêmico · FIAP · não é serviço oficial do SUS nem da Prefeitura</p>
+    </div>
+  </header>
+
+  <div id="sim-banner" class="sim" hidden role="note">
+    Falha simulada ativa: a consulta à base responde HTTP 503 de propósito (cenário C).
+    <a href="./">Desativar simulação</a>
+  </div>
+
+  <main class="wrap grid">
+    <section class="chat" aria-labelledby="chat-title">
+      <div class="chat-head">
+        <h2 id="chat-title">Conversa</h2>
+        <button id="reset" type="button" class="ghost">Nova conversa</button>
+      </div>
+
+      <div id="ai-status" class="status" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status-text">Preparando a IA…</span>
+        <progress id="progress" max="100" value="0" hidden></progress>
+        <button id="retry" type="button" class="retry" hidden>Tentar carregar a IA novamente</button>
+      </div>
+
+      <ol id="log" class="log" role="log" aria-live="polite" aria-label="Histórico da conversa">
+        <li class="msg bot" data-kind="welcome">
+          <p>Olá! Diga o que procura e onde: distrito e município. Exemplo: “Onde encontro uma UBS na Bela Vista, São Paulo?”.</p>
+        </li>
+      </ol>
+
+      <div class="examples" aria-label="Exemplos de mensagem">
+        <button type="button" class="chip" data-example="Onde encontro uma UBS na Bela Vista, São Paulo?">UBS na Bela Vista, São Paulo</button>
+        <button type="button" class="chip" data-example="Preciso encontrar uma UBS.">Preciso encontrar uma UBS</button>
+        <button type="button" class="chip" data-example="Quero saber quais vacinas estão disponíveis hoje.">Vacinas disponíveis hoje?</button>
+        <button type="button" class="chip" data-example="Explique suas funções e como posso usar este assistente.">O que você faz?</button>
+      </div>
+
+      <form id="form" class="composer" novalidate>
+        <label for="msg">Sua mensagem</label>
+        <div class="row">
+          <textarea id="msg" name="msg" rows="2" autocomplete="off" aria-describedby="hint counter" placeholder="Ex.: Procuro uma UBS no Cambuci, São Paulo"></textarea>
+          <button id="send" type="submit" disabled>Enviar</button>
+        </div>
+        <p id="hint" class="hint">Não informe CPF, nome ou endereço residencial. Distrito e município bastam.</p>
+        <p id="counter" class="counter" aria-live="off">0/600</p>
+      </form>
+    </section>
+
+    <aside class="side" aria-label="Sobre o agente">
+      <section class="card">
+        <h2>O que eu consulto</h2>
+        <p>Cadastro de UBS extraído da relação pública da SMS-SP/CEInfo (outubro de 2026): nome, endereço, CEP e telefone quando consta.</p>
+      </section>
+      <section class="card">
+        <h2>O que eu não informo</h2>
+        <ul>
+          <li>Diagnóstico, triagem ou medicamentos</li>
+          <li>Vagas, vacinas, estoque ou horário atual</li>
+          <li>UBS de referência do seu endereço ou a mais próxima</li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>Cobertura</h2>
+        <p>Município de São Paulo/SP, tipo UBS, distritos:</p>
+        <ul class="chips">
+          <li>Bela Vista</li><li>Bom Retiro</li><li>Cambuci</li><li>Santa Cecília</li><li>Sé</li>
+        </ul>
+      </section>
+      <section class="card small">
+        <h2>Modelo e privacidade</h2>
+        <p>Encoder <code>paraphrase-multilingual-MiniLM-L12-v2</code> (ONNX q8) rodando no seu navegador via Transformers.js 3.8.1. Ele classifica a intenção; não gera texto. O primeiro acesso baixa cerca de 135 MB de pesos (CDN do Hugging Face), depois o navegador guarda em cache.</p>
+        <p>A conversa fica só na memória desta aba e é apagada ao recarregar ou em “Nova conversa”. Hospedagem e CDNs recebem metadados técnicos das requisições (IP, navegador).</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Global Solution 2026 · AI in Digital Transformation · FIAP. Dados: PMSP/SMS/CEInfo, fonte MS-CNES. Snapshot documental, não consulta oficial ao vivo.</p>
+  </footer>
+
+  <template id="unit-tpl">
+    <article class="unit">
+      <h3 class="u-name"></h3>
+      <p class="u-addr"></p>
+      <p class="u-phone"></p>
+      <p class="u-src"></p>
+    </article>
+  </template>
+</body>
+</html>

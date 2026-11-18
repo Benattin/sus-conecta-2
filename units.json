@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "smssp-ceinfo-2026-10-2b69baf5",
+  "source": {
+    "title": "Relação dos Estabelecimentos e Serviços da SMS-SP por Região / Zona",
+    "publisher": "PMSP/SMS/CEInfo (fonte: MS-CNES; EstabSUS)",
+    "reference": "Outubro de 2026",
+    "url": "https://prefeitura.sp.gov.br/documents/d/saude/unid_munic_saude_zona_outubro2026",
+    "pages": "páginas físicas 6 a 8 (Região/Zona Centro)",
+    "retrievedAt": "2026-11-18",
+    "sha256": "2b69baf599f84aa0a211f0b3cad3df0a28d066325fa14d50e21929a7313a5005",
+    "nature": "Snapshot documental extraído de PDF público; não é API oficial em tempo real."
+  },
+  "coverage": {
+    "city": "São Paulo",
+    "state": "SP",
+    "type": "UBS",
+    "districts": [
+      "Bela Vista",
+      "Bom Retiro",
+      "Cambuci",
+      "Santa Cecília",
+      "Sé"
+    ]
+  },
+  "units": [
+    {
+      "id": "ubs-humaita",
+      "name": "UBS HUMAITÁ - DR. JOÃO DE AZEVEDO LAGE",
+      "type": "UBS",
+      "district": "Bela Vista",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. HUMAITÁ, 520 - BELA VISTA",
+      "cep": "01321-010",
+      "phone": "4210-5615",
+      "sourcePage": 6
+    },
+    {
+      "id": "ubs-nossa-senhora-do-brasil",
+      "name": "UBS NOSSA SENHORA DO BRASIL - ARMANDO DARIENZO",
+      "type": "UBS",
+      "district": "Bela Vista",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. ALMIRANTE MARQUES LEÃO, 684 - BELA VISTA",
+      "cep": "01330-010",
+      "phone": "4210-6121",
+      "sourcePage": 6
+    },
+    {
+      "id": "ubs-bom-retiro",
+      "name": "UBS BOM RETIRO - DR. OCTAVIO AUGUSTO RODOVALHO",
+      "type": "UBS",
+      "district": "Bom Retiro",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. TENENTE PENA, 8 - BOM RETIRO",
+      "cep": "01127-020",
+      "phone": "4210-5426",
+      "sourcePage": 6
+    },
+    {
+      "id": "ubs-cambuci",
+      "name": "UBS CAMBUCI",
+      "type": "UBS",
+      "district": "Cambuci",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "AV. LACERDA FRANCO, 791 - CAMBUCI",
+      "cep": "01536-000",
+      "phone": "4210-5428",
+      "sourcePage": 6
+    },
+    {
+      "id": "ubs-boracea",
+      "name": "UBS BORACEA",
+      "type": "UBS",
+      "district": "Santa Cecília",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. BORACEA, 270 - BARRA FUNDA",
+      "cep": "01135-010",
+      "phone": "4210-5427",
+      "sourcePage": 7
+    },
+    {
+      "id": "ubs-santa-cecilia",
+      "name": "UBS SANTA CECÍLIA - DR HUMBERTO PASCALE",
+      "type": "UBS",
+      "district": "Santa Cecília",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. VITORINO CARMILO, 599 - CAMPOS ELÍSEOS",
+      "cep": "01153-000",
+      "phone": "5128-1976",
+      "sourcePage": 7
+    },
+    {
+      "id": "ubs-republica",
+      "name": "UBS REPÚBLICA - FERNANDA SANTE LIMEIRA",
+      "type": "UBS",
+      "district": "Sé",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. LIBERO BADARÓ, 282 - CENTRO",
+      "cep": "01008-000",
+      "phone": "4210-6122",
+      "sourcePage": 8
+    },
+    {
+      "id": "ubs-se",
+      "name": "UBS SÉ",
+      "type": "UBS",
+      "district": "Sé",
+      "city": "São Paulo",
+      "state": "SP",
+      "address": "R. FREDERICO ALVARENGA, 259 TERREO - SE",
+      "cep": "01020-030",
+      "phone": "4210-6124 / 4210-5398",
+      "sourcePage": 8
+    }
+  ]
+}
