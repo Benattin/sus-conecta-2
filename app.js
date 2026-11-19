@@ -16,7 +16,6 @@ let loadTimer = null;
 let reqSeq = 0;
 const pending = new Map();
 let session = newSession();
-let lastText = null;
 const feedback = [];
 
 const simulate = new URLSearchParams(location.search).get("simular");
@@ -159,7 +158,7 @@ function renderUnit(u, source) {
   return card;
 }
 
-function renderBot(r) {
+function renderBot(r, text) {
   const res = r.response;
   const li = el("li", "msg bot");
   li.dataset.kind = res.kind;
@@ -197,7 +196,8 @@ function renderBot(r) {
     const b = el("button", "small-btn", "Tentar novamente");
     b.type = "button";
     b.dataset.retryQuery = "1";
-    b.addEventListener("click", () => submit(lastText));
+    // Reenvia o texto desta mensagem, não o da última enviada.
+    b.addEventListener("click", () => submit(text));
     actions.append(b);
   }
   if (res.kind !== "reject") {
@@ -220,14 +220,13 @@ function renderBot(r) {
 async function submit(text) {
   if (state !== "ready") return;
   const myGen = generation;
-  lastText = text;
   addUser(text);
   setState("processing");
   try {
     const r = await runTurn({ text, session, classify, fetchSource });
     if (myGen !== generation) return; // resposta antiga apos reinicio: descartada
     session = r.session;
-    renderBot(r);
+    renderBot(r, text);
   } catch {
     // Falha do Worker ja tratada em fail(); nada a renderizar sem o modelo.
   } finally {
@@ -256,7 +255,6 @@ document.querySelectorAll("[data-example]").forEach((b) => b.addEventListener("c
 els.retry.addEventListener("click", () => startWorker());
 els.reset.addEventListener("click", () => {
   session = newSession();
-  lastText = null;
   feedback.length = 0;
   [...els.log.children].slice(1).forEach((n) => n.remove());
   els.msg.value = "";

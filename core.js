@@ -30,6 +30,12 @@ const OTHER_DISTRICTS = ["Pinheiros", "Liberdade", "República", "Consolação",
   "Butantã", "Santana", "Tatuapé", "Itaquera", "Jabaquara", "Ipiranga", "Brás", "Perdizes", "Barra Funda",
   "Moema", "Pari", "Belém", "Jardim Paulista", "Vila Prudente", "Penha", "Sacomã", "Cursino"];
 
+// Formas usuais de dizer "a capital" sem o nome completo ("SP capital", "sampa").
+const COVERED_CITY_ALIASES = ["sp capital", "capital de sp", "capital paulista", "capital de sao paulo", "sao paulo capital", "sampa"];
+
+// Marcador antes de "se" que indica o distrito Sé (também em caixa alta: "NA SE" não é Sergipe).
+const SE_MARK_RE = /(?:na|da|distrito d[ae]|bairro d[ae]|regiao d[ae]|praca d[ae]) $/;
+
 const STATE_NAMES = { "sao paulo": "SP", "rio de janeiro": "RJ", "minas gerais": "MG", "santa catarina": "SC",
   "parana": "PR", "rio grande do sul": "RS", "bahia": "BA", "pernambuco": "PE" };
 
@@ -162,12 +168,16 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
   const ufRe = /(?<![\p{L}\d])([A-Z]{2})(?![\p{L}\d])/gu;
   let m;
   while ((m = ufRe.exec(original))) {
+    if (m[1] === "SE" && SE_MARK_RE.test(folded.slice(0, m.index))) continue;
     if (UFS.includes(m[1])) loc.push({ kind: "state", value: m[1], start: m.index, end: m.index + 2 });
   }
 
   // Municipios conhecidos.
   for (const city of Object.keys(CITY_UF)) {
     for (const r of findTerm(folded, city)) loc.push({ kind: "city", value: city, start: r.start, end: r.end });
+  }
+  for (const alias of COVERED_CITY_ALIASES) {
+    for (const r of findTerm(folded, alias)) loc.push({ kind: "city", value: COVERED_CITY, start: r.start, end: r.end });
   }
   // Padrao "Cidade/UF", "Cidade - UF" ou "Cidade, UF" para municipios fora da lista.
   const cityUfRe = /(\p{Lu}[\p{L}]+(?:\s+(?:d[aeo]s?\s+)?\p{Lu}[\p{L}]+)*)\s*(?:\/|-|,)\s*([A-Z]{2})(?![\p{L}])/gu;
@@ -195,9 +205,8 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
       const re = /(?<![a-z])se(?![a-z])/g;
       while ((m = re.exec(folded))) {
         const accented = /[éÉ]/.test(original[m.index + 1]);
-        const marked = /(?:na|da|distrito d[ae]|bairro d[ae]|regiao d[ae]|praca d[ae]) $/.test(folded.slice(0, m.index));
-        const isUf = original.slice(m.index, m.index + 2) === "SE";
-        if ((accented || marked) && !isUf) loc.push({ kind: "district", value: d, covered: true, start: m.index, end: m.index + 2 });
+        const marked = SE_MARK_RE.test(folded.slice(0, m.index));
+        if (accented || marked) loc.push({ kind: "district", value: d, covered: true, start: m.index, end: m.index + 2 });
       }
       continue;
     }
@@ -310,7 +319,10 @@ export function decide({ text, intent, session: prev, now = Date.now(), options 
   }
   if (s.injection) notes.push("injection_ignored");
 
-  const ubsPos = s.services.some((x) => x.key === "UBS" && x.polarity === "pos");
+  // "Não quero UBS na Sé, quero no Cambuci": a negação atinge o local, não o serviço.
+  const districtPos = s.mentions.some((x) => x.kind === "district" && x.polarity === "pos");
+  const ubsAny = s.services.some((x) => x.key === "UBS");
+  const ubsPos = s.services.some((x) => x.key === "UBS" && x.polarity === "pos") || (ubsAny && districtPos);
   const ubsNeg = !ubsPos && s.services.some((x) => x.key === "UBS" && x.polarity === "neg");
   const NON_SERVICE = ["UBS", "POSTO_AMBIGUO", "ATRIBUTO", "FORA_SAUDE"];
   const othersPos = uniq(s.services.filter((x) => !NON_SERVICE.includes(x.key) && x.polarity === "pos").map((x) => x.key));
@@ -345,7 +357,7 @@ export function decide({ text, intent, session: prev, now = Date.now(), options 
       return out("CLARIFY", "service_unclear", "Você quer localizar uma UBS nesse local? Responda, por exemplo: \"Procuro uma UBS na Bela Vista, São Paulo\".", session);
     }
     if (label === "INFO") {
-      return out("INFO", "info", "Sou um agente informativo: localizo endereços de UBS em " + coverageText() + ", a partir de uma base documental pública da SMS-SP (outubro/2026). Não faço diagnóstico, agendamento nem informo vagas. Não peça nem envie CPF, nome ou endereço residencial; basta distrito e município.", session);
+      return out("INFO", "info", "Sou um agente informativo: localizo endereços de UBS em " + coverageText() + ", a partir de uma base documental pública da SMS-SP (outubro/2026). Não faço diagnóstico, agendamento nem informo vagas. Não peça nem envie CPF, nome ou endereço residencial; basta distrito e município.", { ...session, service: "UBS" });
     }
     if (label === "CLINICAL") {
       return out("LIMIT", "clinical", "Não faço diagnóstico, triagem nem indico medicamentos. Procure um profissional de saúde; em emergência, ligue 192 (SAMU).", session);
@@ -497,7 +509,7 @@ const NOTE_TEXT = {
   combined_limit: "Sobre vacinas, UPA, hospital, vagas ou estoque: a base não traz esses dados; confirme na unidade.",
   clinical_limit: "Não faço avaliação de sintomas; procure um profissional. Em emergência, ligue 192 (SAMU).",
   attribute_unavailable: "A base não informa fila, tempo de espera ou lotação; as UBS abaixo foram filtradas só por local.",
-  injection_ignored:"Instruções para mudar regras ou a fonte foram ignoradas; a consulta usa sempre a base configurada.",
+  injection_ignored: "Instruções para mudar regras ou a fonte foram ignoradas; a consulta usa sempre a base configurada.",
 };
 
 // Executa um turno completo: classificacao (injetada), decisao, ferramenta e resposta.
