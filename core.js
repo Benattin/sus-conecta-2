@@ -2,7 +2,18 @@
 // Funcoes puras sempre que possivel; usado pela interface e pelos testes.
 import { CONFIG } from "./config.js";
 
-export const COVERED_DISTRICTS = ["Bela Vista", "Bom Retiro", "Cambuci", "Santa Cecília", "Sé"];
+// Os 96 distritos administrativos do município (índice do PDF SMS-SP/CEInfo + Consolação, presente só no mapa).
+export const COVERED_DISTRICTS = ["Água Rasa", "Alto de Pinheiros", "Anhanguera", "Aricanduva", "Artur Alvim", "Barra Funda",
+  "Bela Vista", "Belém", "Bom Retiro", "Brás", "Brasilândia", "Butantã", "Cachoeirinha", "Cambuci", "Campo Belo", "Campo Grande",
+  "Campo Limpo", "Cangaíba", "Capão Redondo", "Carrão", "Casa Verde", "Cidade Ademar", "Cidade Dutra", "Cidade Líder",
+  "Cidade Tiradentes", "Consolação", "Cursino", "Ermelino Matarazzo", "Freguesia do Ó", "Grajaú", "Guaianases", "Iguatemi",
+  "Ipiranga", "Itaim Bibi", "Itaim Paulista", "Itaquera", "Jabaquara", "Jaçanã", "Jaguara", "Jaguaré", "Jaraguá", "Jardim Ângela",
+  "Jardim Helena", "Jardim Paulista", "Jardim São Luís", "José Bonifácio", "Lajeado", "Lapa", "Liberdade", "Limão", "Mandaqui",
+  "Marsilac", "Moema", "Mooca", "Morumbi", "Parelheiros", "Pari", "Parque do Carmo", "Pedreira", "Penha", "Perdizes", "Perus",
+  "Pinheiros", "Pirituba", "Ponte Rasa", "Raposo Tavares", "República", "Rio Pequeno", "Sacomã", "Santa Cecília", "Santana",
+  "Santo Amaro", "São Domingos", "São Lucas", "São Mateus", "São Miguel", "São Rafael", "Sapopemba", "Saúde", "Sé", "Socorro",
+  "Tatuapé", "Tremembé", "Tucuruvi", "Vila Andrade", "Vila Curuçá", "Vila Formosa", "Vila Guilherme", "Vila Jacuí",
+  "Vila Leopoldina", "Vila Maria", "Vila Mariana", "Vila Matilde", "Vila Medeiros", "Vila Prudente", "Vila Sônia"];
 export const COVERED_CITY = "São Paulo";
 export const COVERED_STATE = "SP";
 
@@ -21,14 +32,17 @@ const OTHER_CITIES = {
   "Curitiba": "PR", "Porto Alegre": "RS", "Florianópolis": "SC", "Joinville": "SC", "Salvador": "BA",
   "Recife": "PE", "Fortaleza": "CE", "Brasília": "DF", "Manaus": "AM", "Goiânia": "GO", "Natal": "RN",
   "João Pessoa": "PB", "Maceió": "AL", "Aracaju": "SE", "Teresina": "PI", "São Luís": "MA", "Cuiabá": "MT",
-  "Campo Grande": "MS", "Palmas": "TO", "Porto Velho": "RO", "Macapá": "AP", "Rio Branco": "AC",
+  "Palmas": "TO", // Campo Grande/MS fica fora: é também distrito da capital (ver COVERED_DISTRICTS) "Porto Velho": "RO", "Macapá": "AP", "Rio Branco": "AC",
 };
 const CITY_UF = { [COVERED_CITY]: COVERED_STATE, ...OTHER_CITIES };
 
-// Distritos do municipio de Sao Paulo fora do recorte (exigem inicial maiuscula para evitar palavras comuns).
-const OTHER_DISTRICTS = ["Pinheiros", "Liberdade", "República", "Consolação", "Mooca", "Lapa", "Vila Mariana",
-  "Butantã", "Santana", "Tatuapé", "Itaquera", "Jabaquara", "Ipiranga", "Brás", "Perdizes", "Barra Funda",
-  "Moema", "Pari", "Belém", "Jardim Paulista", "Vila Prudente", "Penha", "Sacomã", "Cursino"];
+// Distritos que também são palavras comuns ("preciso de socorro", "posto de saúde"): só valem com inicial
+// maiúscula ou depois de marcador de lugar ("na Saúde", "bairro da Penha").
+const COMMON_WORD_DISTRICTS = ["Saúde", "Socorro", "Liberdade", "República", "Pedreira", "Limão", "Lapa", "Penha", "Perus",
+  "Pari", "Belém", "Lajeado", "Consolação"];
+const PLACE_MARK_RE = /(?:^|\s)(?:na|no|em|bairro|distrito|regiao)(?:\s+d[aeo])?\s+$/;
+// "posto de Saúde", "Unidade Básica de Saúde", "Secretaria da Saúde": o serviço, não o distrito.
+const SAUDE_SERVICE_RE = /(?:posto|basica|unidade|secretaria|agente|centro|plano|sistema|ministerio)\s+d[aeo]\s+$/;
 
 // Formas usuais de dizer "a capital" sem o nome completo ("SP capital", "sampa").
 const COVERED_CITY_ALIASES = ["sp capital", "capital de sp", "capital paulista", "capital de sao paulo", "sao paulo capital", "sampa"];
@@ -184,7 +198,7 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
   while ((m = cityUfRe.exec(original))) {
     const name = m[1].replace(/^(Em|Na|No|De|Da|Do)\s+/, "");
     const f = fold(name);
-    const isDistrict = [...districts, ...OTHER_DISTRICTS].some((d) => fold(d) === f);
+    const isDistrict = districts.some((d) => fold(d) === f);
     if (UFS.includes(m[2]) && !isDistrict && f !== "ubs" && !CITY_UF[name]) {
       const start = m.index + m[1].length - name.length;
       loc.push({ kind: "city", value: name, start, end: start + name.length, generic: true });
@@ -210,11 +224,12 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
       }
       continue;
     }
-    for (const r of findTerm(folded, d)) loc.push({ kind: "district", value: d, covered: true, ...r });
-  }
-  for (const d of OTHER_DISTRICTS) {
+    const common = COMMON_WORD_DISTRICTS.includes(d);
     for (const r of findTerm(folded, d)) {
-      if (/\p{Lu}/u.test(original[r.start])) loc.push({ kind: "district", value: d, covered: false, ...r });
+      const before = folded.slice(0, r.start);
+      if (d === "Saúde" && SAUDE_SERVICE_RE.test(before)) continue;
+      if (common && !/\p{Lu}/u.test(original[r.start]) && !PLACE_MARK_RE.test(before)) continue;
+      loc.push({ kind: "district", value: d, covered: true, ...r });
     }
   }
 
@@ -240,8 +255,10 @@ export function analyze(text, { districts = COVERED_DISTRICTS } = {}) {
         const w = words.slice(i, i + n).join(" ");
         if (w.length < 5) continue;
         for (const d of districts) {
+          // Com 96 distritos, nomes curtos aceitam só 1 letra trocada ("perto" não vira "Perus").
           const dist = levenshtein(w, fold(d));
-          if (dist > 0 && dist <= 2 && fold(d).split(" ").length === n) { typo = d; break; }
+          const maxDist = fold(d).length >= 8 ? 2 : 1;
+          if (dist > 0 && dist <= maxDist && fold(d).split(" ").length === n) { typo = d; break; }
         }
       }
     }
@@ -282,7 +299,7 @@ export function newSession(now = Date.now()) {
   return { service: null, city: null, state: null, district: null, pendingSuggestion: null, updatedAt: now, turns: 0 };
 }
 
-const coverageText = () => `${COVERED_DISTRICTS.slice(0, -1).join(", ")} e ${COVERED_DISTRICTS.at(-1)}, no município de São Paulo/SP`;
+const coverageText = () => `todos os ${COVERED_DISTRICTS.length} distritos do município de São Paulo/SP`;
 const uniq = (arr) => [...new Set(arr)];
 
 function reply(action, code, text, session, extra = {}) {
@@ -338,7 +355,7 @@ export function decide({ text, intent, session: prev, now = Date.now(), options 
   const hasAttribute = s.services.some((x) => x.key === "ATRIBUTO");
 
   if (s.clinical && !ubsPos) {
-    return out("LIMIT", "clinical", "Não faço diagnóstico, triagem nem indico medicamentos. Procure um profissional de saúde; em emergência, ligue 192 (SAMU). Se quiser, posso consultar o endereço de uma UBS no recorte: informe distrito e município.", session);
+    return out("LIMIT", "clinical", "Não faço diagnóstico, triagem nem indico medicamentos. Procure um profissional de saúde; em emergência, ligue 192 (SAMU). Se quiser, posso consultar o endereço de uma UBS em São Paulo: informe distrito e município.", session);
   }
   if (ubsNeg && !othersPos.length) {
     return out("CLARIFY", "ubs_negated", "Entendi que você não quer uma UBS nesse local. Pode dizer o que procura? Eu só consulto endereços de UBS em " + coverageText() + ".", session);
@@ -440,10 +457,10 @@ function finishLocation(session, out, notes) {
   }
   session.state = COVERED_STATE;
   if (!session.district) {
-    return out("ASK", "ask_district", `Em qual distrito de São Paulo você procura a UBS? Opções do recorte: ${COVERED_DISTRICTS.join(", ")}.`, session);
+    return out("ASK", "ask_district", `Em qual distrito de São Paulo você procura a UBS? Por exemplo: Bela Vista, Mooca, Santana, Pinheiros ou Santo Amaro.`, session);
   }
   if (!COVERED_DISTRICTS.includes(session.district)) {
-    return out("LIMIT", "coverage_district", `${session.district} fica fora do recorte deste protótipo. A ausência no recorte não significa que não exista UBS lá. Cobertura: ${coverageText()}.`, { ...session, district: null });
+    return out("LIMIT", "coverage_district", `${session.district} não consta na lista de distritos da base consultada. Cobertura: ${coverageText()}.`, { ...session, district: null });
   }
   return out("SEARCH", "search", null, session, {
     query: { city: COVERED_CITY, state: COVERED_STATE, district: session.district, type: "UBS" },
